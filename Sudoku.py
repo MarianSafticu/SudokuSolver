@@ -1,5 +1,5 @@
 import math as mt
-
+import random
 
 class sudoku:
     def __init__(self, n, elems):
@@ -12,8 +12,13 @@ class sudoku:
         self._parent = None
 
         # atributes for GA and HC
-        self._zeropos = None    # common
-        self._remNumbers = None
+        self._zeropos = None  # the free positions, that will be the genes of chromosome for GA
+        self._remNumbers = []
+        self._fitness = None
+        self._remNumbersPos = None
+
+    def getFitness(self):
+        return self._fitness
 
     def getChmove(self):
         return self._chmove
@@ -28,7 +33,7 @@ class sudoku:
     #referinta
     def getZeroPos(self, remnum=False):
         if self._zeropos is None:
-            self.blanksAndRemNumbers(remnum)
+            self.blanksAndRemNumbers(False)
         return self._zeropos
 
     #referinta
@@ -67,11 +72,116 @@ class sudoku:
     def setParrent(self, new):
         self._parent = new
 
-    def copyElems(self, arr):
+    def copyElems(self):
         nelems = []
-        for i in arr:
+        for i in self._elems:
             nelems.append(i[:])
         return nelems
+
+    # copy the sudoku and initialize the zeropos and remNumbers if they are not initialized
+    def copy(self, randomize=False):
+        # ret = sudoku(self._n, self.copyElems())
+        ret = sudoku(self._n, self._elems)
+        if self._zeropos is None or self._remNumbers is None:
+            self.blanksAndRemNumbers(False)
+
+        if self._remNumbersPos is None:
+            self._remNumbersPos = []
+            for zp in self._zeropos:
+                self._remNumbersPos.append(self.posMove(zp[0], zp[1]))
+
+        ret._zeropos = self._zeropos
+        ret._remNumbers = self._remNumbers[:]
+        ret._remNumbersPos = self._remNumbersPos
+
+        if randomize:
+            ret.randomizeGenes()
+
+        return ret
+
+    # cut point crossover
+    def crossover(self, ot):
+        p1 = random.randint(0, len(self._zeropos))
+        off = sudoku(self._n, self._elems)
+        off._zeropos = self._zeropos
+        off._remNumbersPos = self._remNumbersPos
+        off._remNumbers = []
+
+        for i in range(len(self._zeropos)):
+            if i <= p1:
+                off._remNumbers.append(self._remNumbers[i])
+            else:
+                off._remNumbers.append(ot._remNumbers[i])
+
+        return off
+
+    # random gene crossover
+    def crossover2(self, ot):
+        off = sudoku(self._n, self._elems)
+        off._zeropos = self._zeropos
+        off._remNumbersPos = self._remNumbersPos
+        off._remNumbers = []
+
+        for i in range(len(self._zeropos)):
+            if random.random() < 0.5:
+                off._remNumbers.append(self._remNumbers[i])
+            else:
+                off._remNumbers.append(ot._remNumbers[i])
+
+        return off
+
+    # random initialization for population of genetical algorithm
+    def randomizeGenes(self):
+        self._remNumbers = [self._remNumbersPos[i][random.randint(0, len(self._remNumbersPos[i]) - 1)] for i in
+                            range(len(self._zeropos))]
+        # self._remNumbers = [random.randint(1, self._n) for i in range(len(self._zeropos))]
+
+    # for GA and HC
+    # mutation can modify the current chromosome(inplace) or return a modified copy
+    def mutate(self, mutRate, inplace=True):
+        if inplace:
+            for i in range(len(self._zeropos)):
+                if random.random() < mutRate:
+                    self._remNumbers[i] = self._remNumbersPos[i][random.randint(0, len(self._remNumbersPos[i]) - 1)]
+                    # self._remNumbers[i] = random.randint(1, self._n)
+        else:
+            ret = self.copy()
+            for i in range(len(ret._zeropos)):
+                if random.random() < mutRate:
+                    ret._remNumbers[i] = self._remNumbersPos[i][random.randint(0, len(self._remNumbersPos[i]) - 1)]
+                    # ret._remNumbers[i] = random.randint(1, self._n)
+            return ret
+
+    # the fitness is the numbers of wrong numbers
+    def calcFitness(self):
+        errors = 0
+        self.placeNumbers()
+        for i in range(len(self._zeropos)):
+            aux = self._remNumbers[i]
+            self._elems[self._zeropos[i][0]][self._zeropos[i][1]] = 0
+            if not self._isValid(self._zeropos[i][0], self._zeropos[i][1], self._remNumbers[i]):
+                errors += 1
+            self._elems[self._zeropos[i][0]][self._zeropos[i][1]] = self._remNumbers[i]
+        self._fitness = errors
+
+    # place numbers in the empty places
+    def placeNumbers(self):
+        for i in range(len(self._remNumbers)):
+            self._elems[self._zeropos[i][0]][self._zeropos[i][1]] = self._remNumbers[i]
+
+    # calculate all posible numbers to put in one square
+    def _isValid(self, line, col, elem):
+        ssq = int(mt.sqrt(self._n))
+        bigsql, bigsqc = line // ssq, col // ssq
+        for i in range(self._n):
+            if i != col and self._elems[line][i] == elem:
+                return False
+            if i != line and self._elems[i][col] == elem:
+                return False
+            l, c = (bigsql * ssq) + i // ssq, (bigsqc * ssq) + i % ssq
+            if line != l and col != c and self._elems[l][c] == elem:
+                return False
+        return True
 
     #insertion sort (dubios) of frequency
     def _sortPosG(self,pos,fr):
@@ -174,17 +284,6 @@ class sudoku:
                 elif remnr:
                     self._remNumbers.remove(self._elems[i][j])
 
-    # for GA
-    def genNSudoku(self, n):
-        pass
-
-    # for GA
-    def crossover(self, ot):
-        pass
-
-    # for GA and HC
-    def mutation(self):
-        pass
 
     # get first empty space
     def firstBlank(self):
